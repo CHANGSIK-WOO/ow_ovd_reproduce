@@ -311,12 +311,12 @@ class OurHead(YOLOv8Head):
         atts = torch.load(att_embeddings)
         self.texts = atts['att_text']
         self.all_atts = atts['att_embedding']
-        print(f"self.texts.shape : {len(self.texts)} | self.all_atts.shape : {len(self.all_atts)}")
+        #print(f"self.texts.shape : {len(self.texts)} | self.all_atts.shape : {len(self.all_atts)}")
         #print(f"self.texts : {self.texts} | self.all_atts : {self.all_atts}")
 
         if self.prev_distribution is not None:
             # todo this
-            print(f"self.thr.shape : {self.thr.shape} | self.thr : {self.thr}")
+            #print(f"self.thr.shape : {self.thr.shape} | self.thr : {self.thr}")
             prev_atts_num = len(torch.load(self.prev_distribution, map_location='cuda')['positive_distributions'][self.thrs.index(self.thr)])
 #             self.positive_distributions = [
 #              {att_i: tensor(...), att_i: tensor(...)}  # thrs[0]
@@ -326,7 +326,7 @@ class OurHead(YOLOv8Head):
         else:
             prev_atts_num = 0
         self.att_embeddings = torch.nn.Parameter(atts['att_embedding'].float()[prev_atts_num:])
-        print(f"self.att_embeddings.shape : {self.att_embeddings.shape}")
+        #print(f"self.att_embeddings.shape : {self.att_embeddings.shape}")
         #print(f"self.att_embeddings[0] : {self.att_embeddings[0]}")        
         # self.att_embeddings = torch.nn.Parameter(torch.zeros(1000, 512).float())
         #         
@@ -334,14 +334,14 @@ class OurHead(YOLOv8Head):
         """Reset the log."""
         # [0, 1] interval = 0.0001
         # interval 0.0001 -> 10k Bins
-        print('reset log')
+        #print('reset log')
         self.positive_distributions = [{att_i: torch.zeros(int((1)/interval)).to(self.device)
                                     for att_i in range(self.att_embeddings.shape[0])} for _ in self.thrs]
         self.negative_distributions=  [{att_i: torch.zeros(int((1)/interval)).to(self.device) 
                                       for att_i in range(self.att_embeddings.shape[0])} for _ in self.thrs]
-        print(f"len(positive_distributions) : {len(self.positive_distributions)}")        
-        print(f"self.positive_distributions[0] : {self.positive_distributions[0]}")        
-        print(f"self.negative_distributions[0] : {self.negative_distributions[0]}")
+        # print(f"len(positive_distributions) : {len(self.positive_distributions)}")        
+        # print(f"self.positive_distributions[0] : {self.positive_distributions[0]}")        
+        # print(f"self.negative_distributions[0] : {self.negative_distributions[0]}")
         
     """YOLO World v8 head."""
     def loss(self, img_feats: Tuple[Tensor], txt_feats: Tensor,
@@ -454,11 +454,11 @@ class OurHead(YOLOv8Head):
         return (ret_logits, *outs[1:])
 
     def calculate_uncertainty(self, known_logits):
-        print("calcualate uncertainty")
-        print(f"known_logits.shape : {known_logits.shape}")
+        #print("calcualate uncertainty")
+        #print(f"known_logits.shape : {known_logits.shape}")
         known_logits = torch.clamp(known_logits, 1e-6, 1 - 1e-6) # about 0~1
         entropy = (-known_logits * torch.log(known_logits) - (1 - known_logits) * torch.log(1 - known_logits)).mean(dim=-1, keepdim=True)
-        print(f"entropy.shape : {known_logits.shape}")
+        #print(f"entropy.shape : {known_logits.shape}")
         return entropy
     
     def select_top_k_attributes(self, adjusted_scores: Tensor, k: int = 3) -> Tensor:
@@ -545,8 +545,8 @@ class OurHead(YOLOv8Head):
         Select attributes based on a balance of distribution similarity and attribute diversity.
         Optimized for speed by avoiding redundant calculations and using batch operations.
         """
-        print("select_att")
-        print(f'thr: {self.thr}')
+        #print("select_att")
+        #print(f'thr: {self.thr}')
         # save_root = os.path.dirname(self.distributions)
         # task_id = self.distributions[-5]
         # if not os.path.exists(save_root):
@@ -569,9 +569,9 @@ class OurHead(YOLOv8Head):
         # Step 2: Prepare for batch cosine similarity calculation
         # Precompute the cosine similarities for all attribute pairs in one batch
         all_atts = self.all_atts.to(self.att_embeddings.device)
-        print(f"distribution_sim.shape : {distribution_sim.shape}")
+        #print(f"distribution_sim.shape : {distribution_sim.shape}")
         #print(f"distribution_sim : {distribution_sim}")
-        print(f"all_atts.shape : {all_atts.shape}")
+        #print(f"all_atts.shape : {all_atts.shape}")
         #print(f"all_atts : {all_atts}")
         
         att_embeddings_norm = F.normalize(all_atts, p=2, dim=1)  # Normalize embeddings (L2 Normalization)
@@ -611,7 +611,7 @@ class OurHead(YOLOv8Head):
         self.att_embeddings = torch.nn.Parameter(all_atts[selected_indices]).to(self.att_embeddings.device)
         self.texts = [self.texts[i] for i in selected_indices]
                      
-        print('Selected attributes saved.')
+        #print('Selected attributes saved.')
   
     def get_sim(self, a, b):
         """
