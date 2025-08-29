@@ -154,7 +154,7 @@ test_pipeline = [
 # evaluation settings
 test_dataloader = dict(dataset=dict(type='YOLOv5CocoDataset',
                         data_root='data/VOC2007',
-                        ann_file='SOWOD/test.json',
+                        ann_file='SOWOD/test.txt',
                         data_prefix=dict(img='JPEGImages/'),
                         filter_cfg=dict(filter_empty_gt=False, min_size=32),
                         pipeline=test_pipeline)

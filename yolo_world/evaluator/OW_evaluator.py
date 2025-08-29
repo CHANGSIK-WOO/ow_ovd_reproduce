@@ -346,8 +346,9 @@ class OWODEvaluator(BaseMetric):
         super().__init__(collect_device=collect_device, prefix=prefix)
         self._dataset_name = dataset_name
 
-        self._anno_file_template = os.path.join(cfg['dataset_root'], "Annotations", "{}.xml")
+        self._anno_file_template = os.path.join(cfg['dataset_root'], "Annotations", "{}.xml") 
         self._image_set_path = os.path.join(cfg['dataset_root'], "ImageSets", "Main", cfg['file_name'])
+
         self._class_names = cfg['class_names'] + ['unknown']
         self._is_2007 = False
         self._cpu_device = torch.device("cpu")

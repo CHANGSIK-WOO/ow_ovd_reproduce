@@ -27,13 +27,13 @@ class_names = [
 # open world setting
 prev_intro_cls = 0
 cur_intro_cls = 19
-train_json = 'annotations/t1_train.json'
+# train_json = 'tasks/S-OWODB/t1.txt'
 # embedding_path = 'data/VOC2007/SOWOD/t1_gt_embeddings.npy'
 # att_embeddings = 'data/VOC2007/SOWOD/task_att_1_embeddings.pth'
 # embedding_path = 'data/VOC2007/SOWOD/fomo_image_net_t1.npy'
 # att_embeddings = None
-embedding_path = 'data/VOC2007/SOWOD/gt_embeddings/t1_gt_embeddings.npy'
-att_embeddings = 'data/VOC2007/SOWOD/att_embeddings/att_t1_embeddings.pth'
+embedding_path = 'data/VOC2007/gt_embeddings/t1_gt_embeddings.npy'
+att_embeddings = 'data/VOC2007/att_embeddings/att_t1_embeddings.pth'
 pipline = [dict(type='att_select', log_start_epoch=1)]
 thr = 0.75
 alpha = 0.3 # 0.3
@@ -99,19 +99,20 @@ model = dict(type='OurDetector',
 
 # dataset settings
 coco_train_dataset = dict(
-        _delete_=True,
         type='MultiModalDataset',
         dataset=dict(
-            type='YOLOv5CocoDataset',
-            metainfo=dict(classes=class_names),
-            data_root='data/VOC2007/SOWOD',
-            ann_file=train_json,
-            data_prefix=dict(img=''), # image_path = data_root + data_prefix["img"] + file_name
+            #type='YOLOv5CocoDataset',
+            type='YOLOv5VOCDataset',
+            metainfo=dict(classes=class_names[:num_classes]),
+            data_root='',
+            ann_file='datasets/ImageSets/Main/S-OWODB/t1.txt',
+            data_prefix=dict(sub_data_root='datasets/',img='JPEGImages/', ann="Annotations/"), # image_path = data_root + data_prefix["img"] + file_name
             filter_cfg=dict(filter_empty_gt=False, min_size=32)),
         class_text_path=f'data/texts/coco_class_texts.json',
         pipeline=_base_.train_pipeline)
 
-train_dataloader = dict(persistent_workers=persistent_workers,
+train_dataloader = dict(_delete_=True,
+                        persistent_workers=persistent_workers,
                         batch_size=train_batch_size_per_gpu,
                         collate_fn=dict(type='yolow_collate'),
                         dataset=coco_train_dataset)
@@ -166,25 +167,26 @@ test_pipeline = [
                     'scale_factor', 'pad_param'))
 ]
 # evaluation settings
-test_dataloader = dict(dataset=dict(type='YOLOv5CocoDataset',
-                        data_root='data/VOC2007/SOWOD/',
-                        ann_file='annotations/instances_val2017.json',
-                        data_prefix=dict(img='JPEGImages_val/'),
-                        filter_cfg=dict(filter_empty_gt=False, min_size=32),
-                        pipeline=test_pipeline)
+test_dataloader = dict(dataset=dict(#type='YOLOv5CocoDataset',
+                                    type='YOLOv5VOCDataset',
+                                    data_root='',
+                                    ann_file='datasets/ImageSets/Main/S-OWODB/test.txt',
+                                    data_prefix=dict(sub_data_root='datasets/',img='JPEGImages/', ann="Annotations/"),
+                                    filter_cfg=dict(filter_empty_gt=False, min_size=32),
+                                    pipeline=test_pipeline)
                        )
 
 test_evaluator = dict(_delete_=True,
                      type='OWODEvaluator',
                      cfg=dict(
-                        dataset_root='data/VOC2007/SOWOD/',
-                        file_name='annotations/instances_val2017.json',
+                        dataset_root='datasets',
+                        file_name='S-OWODB/test.txt',
                         prev_intro_cls=prev_intro_cls,
                         cur_intro_cls=cur_intro_cls,
                         unknown_id=80,
                         class_names=class_names
                      )
-                    )
+                    ) 
 val_evaluator = test_evaluator
 val_dataloader = test_dataloader
 find_unused_parameters = True

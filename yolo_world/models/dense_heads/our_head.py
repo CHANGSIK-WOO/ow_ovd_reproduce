@@ -297,35 +297,51 @@ class OurHead(YOLOv8Head):
     def disable_log(self):
         self.positive_distributions = None
         self.negative_distributions = None
-        print('disable log')
+        print('disable log : distributions to None')
     
     def enable_log(self):
         self.reset_log()
-        print('enable log')
+        print('enable log : distribution made')
     
     def load_att_embeddings(self, att_embeddings):
         if att_embeddings is None:
             self.att_embeddings = None
             self.disable_log()
-            return
+            return #finish load_att_embeddings
         atts = torch.load(att_embeddings)
         self.texts = atts['att_text']
         self.all_atts = atts['att_embedding']
+        print(f"self.texts.shape : {len(self.texts)} | self.all_atts.shape : {len(self.all_atts)}")
+        #print(f"self.texts : {self.texts} | self.all_atts : {self.all_atts}")
+
         if self.prev_distribution is not None:
             # todo this
+            print(f"self.thr.shape : {self.thr.shape} | self.thr : {self.thr}")
             prev_atts_num = len(torch.load(self.prev_distribution, map_location='cuda')['positive_distributions'][self.thrs.index(self.thr)])
+#             self.positive_distributions = [
+#              {att_i: tensor(...), att_i: tensor(...)}  # thrs[0]
+#              {att_i: tensor(...), att_i: tensor(...)}  # thrs[1]
+#              ...
+#              ]
         else:
             prev_atts_num = 0
         self.att_embeddings = torch.nn.Parameter(atts['att_embedding'].float()[prev_atts_num:])
+        print(f"self.att_embeddings.shape : {self.att_embeddings.shape}")
+        #print(f"self.att_embeddings[0] : {self.att_embeddings[0]}")        
         # self.att_embeddings = torch.nn.Parameter(torch.zeros(1000, 512).float())
-        
+        #         
     def reset_log(self, interval=0.0001):
         """Reset the log."""
         # [0, 1] interval = 0.0001
+        # interval 0.0001 -> 10k Bins
+        print('reset log')
         self.positive_distributions = [{att_i: torch.zeros(int((1)/interval)).to(self.device)
                                     for att_i in range(self.att_embeddings.shape[0])} for _ in self.thrs]
         self.negative_distributions=  [{att_i: torch.zeros(int((1)/interval)).to(self.device) 
                                       for att_i in range(self.att_embeddings.shape[0])} for _ in self.thrs]
+        print(f"len(positive_distributions) : {len(self.positive_distributions)}")        
+        print(f"self.positive_distributions[0] : {self.positive_distributions[0]}")        
+        print(f"self.negative_distributions[0] : {self.negative_distributions[0]}")
         
     """YOLO World v8 head."""
     def loss(self, img_feats: Tuple[Tensor], txt_feats: Tensor,
@@ -349,7 +365,9 @@ class OurHead(YOLOv8Head):
         
         
         with torch.no_grad():
-            att_outs = self(img_feats, att_feats)[0]
+            att_outs = self(img_feats, att_feats)[0] 
+            #print(f"len(att_outs) : {len(att_outs)}") # 3
+            #print(f"att_outs : {att_outs}")
         # Fast version
         loss_inputs = outs + (att_outs, batch_data_samples['bboxes_labels'],
                               batch_data_samples['img_metas'])
@@ -392,12 +410,12 @@ class OurHead(YOLOv8Head):
                 img_feats: Tuple[Tensor],
                 txt_feats: Tensor,
                 batch_data_samples: SampleList,
-                rescale: bool = False, 
+                rescale: bool = False,
                 fusion_att: bool = False) -> InstanceList:
         """Perform forward propagation of the detection head and predict
         detection results on the features of the upstream network.
         """
-        if self.att_embeddings.shape[0] != 25 * (self.num_classes):
+        if self.att_embeddings.shape[0] != 25 * (self.num_classes): # 25 : the number of attribute per one class 
             self.select_att()
         
         batch_img_metas = [
@@ -421,7 +439,7 @@ class OurHead(YOLOv8Head):
         if self.att_embeddings is not None:
             outs = self.predict_unknown(outs, img_feats, att_feats)
         predictions = self.predict_by_feat(*outs,
-                                           batch_img_metas=batch_img_metas,
+                                           batch_img_metas=batch_img_metas, 
                                            rescale=rescale)
         return predictions
 
@@ -436,8 +454,11 @@ class OurHead(YOLOv8Head):
         return (ret_logits, *outs[1:])
 
     def calculate_uncertainty(self, known_logits):
-        known_logits = torch.clamp(known_logits, 1e-6, 1 - 1e-6)
+        print("calcualate uncertainty")
+        print(f"known_logits.shape : {known_logits.shape}")
+        known_logits = torch.clamp(known_logits, 1e-6, 1 - 1e-6) # about 0~1
         entropy = (-known_logits * torch.log(known_logits) - (1 - known_logits) * torch.log(1 - known_logits)).mean(dim=-1, keepdim=True)
+        print(f"entropy.shape : {known_logits.shape}")
         return entropy
     
     def select_top_k_attributes(self, adjusted_scores: Tensor, k: int = 3) -> Tensor:
@@ -487,7 +508,7 @@ class OurHead(YOLOv8Head):
             negative = negative / negative.sum()
             dis_sim.append(self.get_sim(positive, negative))
         # (num_attributes,)
-        return torch.stack(dis_sim).to('cuda')
+        return torch.stack(dis_sim).to('cuda') # get similarity scores of each attribute
         
     def combine_distributions(self):
         if self.prev_distribution is None:
@@ -517,67 +538,63 @@ class OurHead(YOLOv8Head):
             ret_pos[thr_id] = prev_pos_dist
             ret_neg[thr_id] = prev_neg_dist
         
-        return ret_pos, ret_neg
+        return ret_pos, ret_neg # previous attribute + current attribute stack
 
     def select_att(self, per_class=25):
         """
         Select attributes based on a balance of distribution similarity and attribute diversity.
         Optimized for speed by avoiding redundant calculations and using batch operations.
         """
+        print("select_att")
         print(f'thr: {self.thr}')
-        dist_path = getattr(self, 'distributions', None)
-        need_compute = True        
-        
-        if dist_path and os.path.exists(dist_path):
-            try:
-                distributions = torch.load(dist_path, map_location='cuda')
-                self.positive_distributions = distributions['positive_distributions']
-                self.negative_distributions = distributions['negative_distributions']
-                need_compute = False
-                print(f'Loaded distributions from: {dist_path}')
-            except Exception as e:
-                print(f'Load failed at {dist_path}: {e}; will recompute.')
+        # save_root = os.path.dirname(self.distributions)
+        # task_id = self.distributions[-5]
+        # if not os.path.exists(save_root):
+        #     os.makedirs(save_root)
+        # torch.save({'positive_distributions': self.positive_distributions,
+        #             'negative_distributions': self.negative_distributions}, os.path.join(save_root, f'current{task_id}.pth'))
+        # print('save current to {}'.format(os.path.join(save_root, f'current{task_id}.pth')))
+        # self.positive_distributions, self.negative_distributions = self.combine_distributions()
 
-        if need_compute:
-            # 네 레포에 이미 있는 함수일 확률 높음. 이름 다르면 그걸로 교체.
-            self.positive_distributions, self.negative_distributions = self.combine_distributions()
-            if dist_path:
-                os.makedirs(os.path.dirname(dist_path) or '.', exist_ok=True)
-                torch.save(
-                    {'positive_distributions': self.positive_distributions,
-                    'negative_distributions': self.negative_distributions},
-                    dist_path
-                )
-                print(f'Saved distributions to: {dist_path}')
+        # torch.save({'positive_distributions': self.positive_distributions,
+        #             'negative_distributions': self.negative_distributions}, self.distributions)
+        # print('save distributions to {}'.format(self.distributions))
+        
+        distributions = torch.load(self.distributions, map_location='cuda')
+        self.positive_distributions, self.negative_distributions = distributions['positive_distributions'], distributions['negative_distributions']
         
         thr_id = self.thrs.index(self.thr)                                                            
         # Step 1: Calculate distribution similarity for each attribute (JS divergence)
         distribution_sim = self.get_all_dis_sim(self.positive_distributions[thr_id], self.negative_distributions[thr_id])
-        print(f"distribution_sim.shape : {distribution_sim.shape}")
         # Step 2: Prepare for batch cosine similarity calculation
         # Precompute the cosine similarities for all attribute pairs in one batch
         all_atts = self.all_atts.to(self.att_embeddings.device)
+        print(f"distribution_sim.shape : {distribution_sim.shape}")
+        #print(f"distribution_sim : {distribution_sim}")
+        print(f"all_atts.shape : {all_atts.shape}")
+        #print(f"all_atts : {all_atts}")
         
-        att_embeddings_norm = F.normalize(all_atts, p=2, dim=1)  # Normalize embeddings
+        att_embeddings_norm = F.normalize(all_atts, p=2, dim=1)  # Normalize embeddings (L2 Normalization)
         if self.use_sigmoid:
             cosine_sim_matrix = torch.matmul(att_embeddings_norm, att_embeddings_norm.T).sigmoid() 
         else:
             cosine_sim_matrix = torch.matmul(att_embeddings_norm, att_embeddings_norm.T).abs()
-        print(f"cosine_sim_matrix.shape : {cosine_sim_matrix.shape}")
+        
         # Initialize selected indices
+        total_to_select = min(per_class * self.num_classes, len(self.texts))  # len(self.texts) == all_atts.shape[0]
         selected_indices = []
         
         # Step 3: Attribute selection loop
-        for _ in range(per_class * self.num_classes):
+        for _ in range(total_to_select):
             if len(selected_indices) == 0:
                 # Select the first attribute with the lowest distribution similarity
-                _, idx = distribution_sim.min(dim=0)
+                # _, idx = distribution_sim.min(dim=0)
+                idx = int(torch.argmin(distribution_sim).item())
+
             else:
                 # Step 4: Calculate diversity score for each unselected attribute
                 # Get the mean cosine similarity between unselected and selected attributes
                 unselected_indices = list(set(range(len(self.texts))) - set(selected_indices))
-                if len(unselected_indices) == 0:
-                    break                 
                 cosine_sim_with_selected = cosine_sim_matrix[unselected_indices][:, selected_indices].mean(dim=1)  # Shape: (num_unselected,)
                 
                 # Calculate final score: balance distribution similarity and diversity (cosine similarity)
@@ -608,7 +625,7 @@ class OurHead(YOLOv8Head):
             return js_div
 
         return jensen_shannon_divergence(a, b)
-            
+      
     def aug_test(self,
                  aug_batch_feats,
                  aug_batch_img_metas,
@@ -708,7 +725,6 @@ class OurHead(YOLOv8Head):
             
         flatten_dist_preds = torch.cat(flatten_pred_dists, dim=1)
         flatten_cls_preds = torch.cat(flatten_cls_preds, dim=1)
-        
         flatten_pred_bboxes = torch.cat(flatten_pred_bboxes, dim=1)
         flatten_pred_bboxes = self.bbox_coder.decode(
             self.flatten_priors_train[..., :2], flatten_pred_bboxes,
@@ -894,7 +910,6 @@ class OurHead(YOLOv8Head):
             flatten_cls_scores = torch.cat(flatten_cls_scores, dim=1)
         else:
             flatten_cls_scores = torch.cat(flatten_att_scores, dim=1).sigmoid()
-            
         flatten_bbox_preds = torch.cat(flatten_bbox_preds, dim=1)
         flatten_decoded_bboxes = self.bbox_coder.decode(
             flatten_priors[None], flatten_bbox_preds, flatten_stride)
